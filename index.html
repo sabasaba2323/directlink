@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>直リンク🔗</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif; max-width: 900px; margin: 0 auto; padding: 0.75rem; color: #1a1a1a; -webkit-tap-highlight-color: transparent; }
+  h1 { font-size: 16px; font-weight: 500; margin: 0 0 0.5rem; display: flex; align-items: center; gap: 8px; }
+  h1 .count { font-size: 12px; color: #666; font-weight: 400; margin-left: auto; }
+  button { font-family: inherit; }
+  input { font-family: inherit; }
+
+  .toolbar { display: flex; align-items: center; gap: 6px; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .toolbar button { font-size: 12px; padding: 6px 10px; cursor: pointer; background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 6px; min-height: 32px; }
+  .toolbar button:hover { background: #f5f5f5; }
+  .status { font-size: 11px; margin-left: auto; }
+  .status.loading { color: #666; }
+  .status.success { color: #1d9e75; }
+  .status.error { color: #c00; }
+
+  /* URL欄: 1行固定 */
+  .url-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 0.5rem; padding: 6px; background: #f5f5f5; border-radius: 8px; }
+  #generated-url {
+    flex: 1;
+    min-width: 0;
+    font-family: ui-monospace, SFMono-Regular, monospace;
+    font-size: 11px;
+    padding: 8px 10px;
+    background: #fff;
+    border-radius: 6px;
+    border: 0.5px solid rgba(0,0,0,0.15);
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    height: 36px;
+    line-height: 20px;
+  }
+  #generated-url.has-url { color: #1a1a1a; }
+  .url-bar button { font-size: 12px; padding: 0 12px; cursor: pointer; background: #fff; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 6px; height: 36px; flex-shrink: 0; white-space: nowrap; }
+  .url-bar button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .url-bar button:not(:disabled):hover { background: #f0f0f0; }
+  .url-bar button:not(:disabled):active { background: #e0e0e0; }
+
+  .options-row { display: flex; gap: 12px; margin-bottom: 0.5rem; font-size: 11px; color: #666; flex-wrap: wrap; align-items: center; }
+  .options-row label { cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; }
+  .options-row input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; }
+  #action-feedback { margin-left: auto; font-size: 11px; color: #1d9e75; min-height: 14px; }
+
+  .tabs { display: flex; gap: 2px; margin-bottom: 0.5rem; border-bottom: 0.5px solid rgba(0,0,0,0.15); }
+  .tab-btn { background: transparent; border: none; padding: 8px 10px; font-size: 12px; cursor: pointer; min-height: 36px; flex: 1; color: #666; }
+  .tab-btn.active { background: #f5f5f5; font-weight: 500; color: #1a1a1a; }
+
+  #product-list { max-height: calc(100vh - 200px); overflow-y: auto; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 8px; -webkit-overflow-scrolling: touch; }
+
+  .row { display: flex; align-items: center; gap: 6px; padding: 8px 6px; border-bottom: 0.5px solid rgba(0,0,0,0.08); }
+  .row:last-child { border-bottom: none; }
+  .row.selected { background: #eaf3fc; }
+
+  .row .toggle { width: 20px; height: 20px; flex-shrink: 0; cursor: pointer; }
+
+  .qty-controls { display: flex; align-items: center; gap: 0; flex-shrink: 0; border: 0.5px solid rgba(0,0,0,0.15); border-radius: 5px; overflow: hidden; background: #fff; }
+  .qty-btn { width: 24px; height: 26px; background: #fff; border: none; font-size: 13px; cursor: pointer; padding: 0; line-height: 1; color: #1a1a1a; user-select: none; }
+  .qty-btn:hover { background: #f0f0f0; }
+  .qty-btn:active { background: #e0e0e0; }
+  .qty-input { width: 26px; height: 26px; font-size: 12px; text-align: center; border: none; border-left: 0.5px solid rgba(0,0,0,0.15); border-right: 0.5px solid rgba(0,0,0,0.15); -moz-appearance: textfield; padding: 0; background: #fff; }
+  .qty-input::-webkit-outer-spin-button, .qty-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .badge { font-size: 10px; padding: 1px 5px; border-radius: 3px; flex-shrink: 0; font-weight: 500; }
+  .badge-blind { background: #e6f1fb; color: #0c447c; }
+  .badge-single { background: #faeeda; color: #854f0b; }
+  .badge-soldout { background: #fcebeb; color: #791f1f; margin-left: 4px; }
+
+  .row .name { flex: 1; font-size: 14px; line-height: 1.35; min-width: 0; }
+  .row .name .title { font-weight: 500; word-break: break-word; }
+  .row .name .variant-label { font-size: 12px; color: #555; margin-top: 1px; }
+  .row .name .meta { font-size: 10px; color: #999; margin-top: 1px; font-family: ui-monospace, monospace; }
+
+  .empty-msg { padding: 2rem; text-align: center; color: #888; font-size: 13px; }
+
+  /* スマホ */
+  @media (max-width: 600px) {
+    body { padding: 0.5rem; }
+    h1 { font-size: 14px; }
+    h1 .count { font-size: 11px; }
+    .toolbar button { font-size: 11px; padding: 6px 8px; min-height: 30px; }
+    .status { font-size: 10px; }
+    #generated-url { font-size: 10px; padding: 6px 8px; height: 32px; line-height: 18px; }
+    .url-bar button { font-size: 11px; padding: 0 8px; height: 32px; }
+    .tab-btn { font-size: 12px; padding: 8px 6px; }
+    .options-row { font-size: 11px; gap: 10px; }
+    .row { gap: 5px; padding: 8px 4px; }
+    .row .toggle { width: 22px; height: 22px; }
+    .row .name { font-size: 14px; }
+    .row .name .variant-label { font-size: 12px; }
+    .row .name .meta { font-size: 10px; }
+    .qty-btn { width: 26px; height: 28px; font-size: 14px; }
+    .qty-input { width: 26px; height: 28px; font-size: 12px; }
+    .badge { font-size: 10px; padding: 1px 4px; }
+    #product-list { max-height: calc(100vh - 180px); }
+  }
+</style>
+</head>
+<body>
+
+<h1>直リンク🔗 <span class="count" id="selected-count">0 商品</span></h1>
+
+<div class="toolbar">
+  <button id="reload-btn">再読込</button>
+  <button id="clear-btn">クリア</button>
+  <span id="status" class="status loading">読み込み中...</span>
+</div>
+
+<div class="url-bar">
+  <div id="generated-url">商品を選択するとURLが生成されます</div>
+  <button id="copy-btn" disabled>コピー</button>
+  <button id="open-btn" disabled>開く</button>
+</div>
+
+<div class="options-row">
+  <label><input type="checkbox" id="hide-soldout"> 売切を非表示</label>
+  <label><input type="checkbox" id="show-fullname"> 商品名を全表示</label>
+  <span id="action-feedback"></span>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="all">すべて</button>
+  <button class="tab-btn" data-tab="blind">ブラインド</button>
+  <button class="tab-btn" data-tab="single">単品</button>
+</div>
+
+<div id="product-list">
+  <div class="empty-msg">商品データを取得しています...</div>
+</div>
+
+<script>
+(function() {
+  const BASE = 'https://www.mellojoyjapan.com';
+  const COLLECTIONS = [
+    { handle: 'mellojoy', tag: 'blind', label: 'ブラインド' },
+    { handle: 'mellojoy-\u5355\u54C1', tag: 'single', label: '単品' }
+  ];
+
+  const NOISE_KEYWORDS = [
+    'キャンセル',
+    'ブラインドボックス',
+    'ブラインドぼっくす',
+    '盲盒',
+    'おもちゃ',
+    'おもちや'
+  ];
+
+  function cleanProductName(name) {
+    if (!name) return '';
+    let s = name;
+    s = s.replace(/【【[^】]*】】/g, '');
+    const pattern = new RegExp(
+      '【[^【】]*(?:' + NOISE_KEYWORDS.join('|') + ')[^【】]*】',
+      'g'
+    );
+    s = s.replace(pattern, '');
+    s = s.replace(/[\s　]+/g, ' ');
+    s = s.trim();
+    return s;
+  }
+
+  let products = [];
+  let selected = new Map();
+  let currentTab = 'all';
+
+  const statusEl = document.getElementById('status');
+  const listEl = document.getElementById('product-list');
+  const urlEl = document.getElementById('generated-url');
+  const countEl = document.getElementById('selected-count');
+  const copyBtn = document.getElementById('copy-btn');
+  const openBtn = document.getElementById('open-btn');
+  const feedbackEl = document.getElementById('action-feedback');
+  const hideSoldout = document.getElementById('hide-soldout');
+  const showFullname = document.getElementById('show-fullname');
+
+  async function fetchCollection(handle) {
+    const encoded = encodeURI(handle);
+    const target = `${BASE}/collections/${encoded}/products.json?limit=250`;
+    const res = await fetch(target);
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${handle}`);
+    return await res.json();
+  }
+
+  async function loadAll() {
+    statusEl.textContent = '読込中...';
+    statusEl.className = 'status loading';
+    products = [];
+    const errors = [];
+    for (const col of COLLECTIONS) {
+      try {
+        const data = await fetchCollection(col.handle);
+        for (const p of (data.products || [])) {
+          products.push({
+            id: p.id,
+            title: p.title,
+            tag: col.tag,
+            variants: (p.variants || []).map(v => ({
+              id: v.id,
+              title: v.title,
+              available: v.available,
+              price: v.price
+            }))
+          });
+        }
+      } catch (e) {
+        errors.push(`${col.label}: ${e.message}`);
+      }
+    }
+    const blindCount = products.filter(p => p.tag === 'blind').length;
+    const singleCount = products.filter(p => p.tag === 'single').length;
+    if (errors.length) {
+      statusEl.textContent = `失敗 (ブ${blindCount}/単${singleCount})`;
+      statusEl.className = 'status error';
+    } else {
+      statusEl.textContent = `ブ${blindCount} / 単${singleCount}`;
+      statusEl.className = 'status success';
+    }
+    render();
+  }
+
+  function flattenVariants() {
+    const rows = [];
+    for (const p of products) {
+      const hasMultipleVariants = p.variants.length > 1;
+      for (const v of p.variants) {
+        rows.push({
+          productId: p.id,
+          productTitle: p.title,
+          tag: p.tag,
+          variantId: v.id,
+          variantTitle: v.title,
+          available: v.available,
+          price: v.price,
+          showVariantLabel: hasMultipleVariants
+        });
+      }
+    }
+    return rows;
+  }
+
+  function render() {
+    let rows = flattenVariants();
+
+    rows = rows.filter(r => {
+      if (currentTab !== 'all' && r.tag !== currentTab) return false;
+      if (hideSoldout.checked && !r.available) return false;
+      return true;
+    });
+
+    if (rows.length === 0) {
+      listEl.innerHTML = '<div class="empty-msg">該当商品なし</div>';
+      return;
+    }
+
+    const useFullName = showFullname.checked;
+
+    listEl.innerHTML = rows.map(r => {
+      const sel = selected.get(r.variantId);
+      const checked = sel ? 'checked' : '';
+      const rowClass = sel ? 'row selected' : 'row';
+      const badgeClass = r.tag === 'blind' ? 'badge-blind' : 'badge-single';
+      const badgeLabel = r.tag === 'blind' ? 'ブ' : '単';
+      const soldOutBadge = !r.available ? '<span class="badge badge-soldout">売切</span>' : '';
+      const displayTitle = useFullName ? r.productTitle : cleanProductName(r.productTitle);
+      const variantLabel = r.showVariantLabel
+        ? `<div class="variant-label">${escapeHtml(r.variantTitle)}</div>`
+        : '';
+      const qty = sel ? sel.qty : 1;
+
+      return `
+        <div class="${rowClass}" data-vid="${r.variantId}">
+          <input type="checkbox" class="toggle" data-vid="${r.variantId}" ${checked} />
+          <div class="qty-controls">
+            <button class="qty-btn qty-minus" data-vid="${r.variantId}" type="button">−</button>
+            <input type="number" class="qty-input" data-vid="${r.variantId}" min="1" max="99" value="${qty}" />
+            <button class="qty-btn qty-plus" data-vid="${r.variantId}" type="button">+</button>
+          </div>
+          <span class="badge ${badgeClass}">${badgeLabel}</span>
+          <div class="name">
+            <div class="title">${escapeHtml(displayTitle)}${soldOutBadge}</div>
+            ${variantLabel}
+            <div class="meta">${r.variantId}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    bindRowEvents();
+  }
+
+  function bindRowEvents() {
+    listEl.querySelectorAll('.toggle').forEach(el => {
+      el.addEventListener('change', e => {
+        const vid = parseInt(e.target.dataset.vid);
+        if (e.target.checked) {
+          const row = e.target.closest('.row');
+          const qtyInput = row.querySelector('.qty-input');
+          const qty = parseInt(qtyInput.value) || 1;
+          selected.set(vid, { qty });
+        } else {
+          selected.delete(vid);
+        }
+        const row = e.target.closest('.row');
+        row.classList.toggle('selected', e.target.checked);
+        updateUrl();
+      });
+    });
+
+    listEl.querySelectorAll('.qty-input').forEach(el => {
+      el.addEventListener('input', e => {
+        const vid = parseInt(e.target.dataset.vid);
+        let v = parseInt(e.target.value);
+        if (isNaN(v) || v < 1) v = 1;
+        if (v > 99) v = 99;
+        e.target.value = v;
+        const sel = selected.get(vid);
+        if (sel) {
+          sel.qty = v;
+          updateUrl();
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.qty-minus').forEach(el => {
+      el.addEventListener('click', e => {
+        const vid = parseInt(e.target.dataset.vid);
+        const row = e.target.closest('.row');
+        const qtyInput = row.querySelector('.qty-input');
+        let v = parseInt(qtyInput.value) || 1;
+        v = Math.max(1, v - 1);
+        qtyInput.value = v;
+        const sel = selected.get(vid);
+        if (sel) {
+          sel.qty = v;
+          updateUrl();
+        }
+      });
+    });
+
+    listEl.querySelectorAll('.qty-plus').forEach(el => {
+      el.addEventListener('click', e => {
+        const vid = parseInt(e.target.dataset.vid);
+        const row = e.target.closest('.row');
+        const qtyInput = row.querySelector('.qty-input');
+        let v = parseInt(qtyInput.value) || 1;
+        v = Math.min(99, v + 1);
+        qtyInput.value = v;
+        const sel = selected.get(vid);
+        if (sel) {
+          sel.qty = v;
+          updateUrl();
+        }
+      });
+    });
+  }
+
+  function updateUrl() {
+    countEl.textContent = `${selected.size} 商品`;
+    if (selected.size === 0) {
+      urlEl.textContent = '商品を選択するとURLが生成されます';
+      urlEl.classList.remove('has-url');
+      copyBtn.disabled = true;
+      openBtn.disabled = true;
+      return;
+    }
+    const parts = Array.from(selected.entries()).map(([vid, s]) => `${vid}:${s.qty}`);
+    // クエリパラメータを除去したシンプル形式
+    const url = `${BASE}/cart/${parts.join(',')}`;
+    urlEl.textContent = url;
+    urlEl.classList.add('has-url');
+    copyBtn.disabled = false;
+    openBtn.disabled = false;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+
+  function flashFeedback(msg, isError) {
+    feedbackEl.textContent = msg;
+    feedbackEl.style.color = isError ? '#c00' : '#1d9e75';
+    setTimeout(() => { feedbackEl.textContent = ''; }, 2500);
+  }
+
+  copyBtn.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(urlEl.textContent);
+      flashFeedback('コピー済');
+    } catch (e) {
+      flashFeedback('コピー失敗', true);
+    }
+  });
+
+  openBtn.addEventListener('click', () => {
+    window.location.href = urlEl.textContent;
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentTab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === currentTab);
+      });
+      render();
+    });
+  });
+
+  hideSoldout.addEventListener('change', render);
+  showFullname.addEventListener('change', render);
+
+  document.getElementById('reload-btn').addEventListener('click', loadAll);
+  document.getElementById('clear-btn').addEventListener('click', () => {
+    selected.clear();
+    render();
+    updateUrl();
+  });
+
+  loadAll();
+})();
+</script>
+
+</body>
+</html>
