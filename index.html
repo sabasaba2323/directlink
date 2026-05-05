@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -64,7 +63,7 @@
     background: #fff;
     text-transform: uppercase;
   }
-  .code-input::placeholder { color: #c0a877; text-transform: none; font-family: inherit; }
+  .code-input::placeholder { color: #dcc9a0; text-transform: none; font-family: inherit; }
   .input-controls {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
     font-size: 11px;
@@ -234,8 +233,32 @@
     return m ? m[1] : null;
   }
 
+  function extractVariantCode(variantTitle) {
+    if (!variantTitle) return null;
+    const m = variantTitle.match(PRODUCT_CODE_REGEX);
+    return m ? m[1] : null;
+  }
+
   function normalizeCode(s) {
     return String(s || '').trim().replace(/[【】\[\]\s]/g, '').toUpperCase();
+  }
+
+  // サブコード判定（例: "Z074-1" は true、"Z074" は false）
+  // 末尾が -数字 で終わるかどうかで判定（桁数は問わない）
+  function isSubCode(code) {
+    return /-\d+$/.test(code);
+  }
+
+  // 入力コードと行のマッチング判定
+  // - サブコード入力（Z074-1）: variantCode 完全一致のみ
+  // - 親コード入力（Z074）: productCode 完全一致のみ
+  function matchesInputCode(row, inputCode) {
+    const code = normalizeCode(inputCode);
+    if (!code) return false;
+    if (isSubCode(code)) {
+      return !!(row.variantCode && row.variantCode.toUpperCase() === code);
+    }
+    return !!(row.productCode && row.productCode.toUpperCase() === code);
   }
 
   let products = [];
@@ -271,10 +294,6 @@
 
   function getActiveCodes() {
     return inputCodes.map(normalizeCode).filter(Boolean);
-  }
-
-  function getCodeSet() {
-    return new Set(getActiveCodes());
   }
 
   const statusEl = document.getElementById('status');
@@ -347,10 +366,12 @@
     for (const p of products) {
       const hasMultipleVariants = p.variants.length > 1;
       for (const v of p.variants) {
+        const variantCode = extractVariantCode(v.title) || p.productCode;
         rows.push({
           productId: p.id,
           productTitle: p.title,
           productCode: p.productCode,
+          variantCode: variantCode,
           tag: p.tag,
           variantId: v.id,
           variantTitle: v.title,
@@ -363,21 +384,35 @@
     return rows;
   }
 
-  // 入力コードに一致する商品を選択に追加（売切含む、追記式）
-  // 戻り値: 新たに追加された件数
+  // 入力コードに一致する商品を選択に反映（auto:true）
+  // 既存の auto:true 選択のうち今回マッチしなくなったものは削除
+  // auto:false（手動・全選択）は保持
   function applyMatchingCodes() {
     const codes = getActiveCodes();
-    if (codes.length === 0) return 0;
     const allRows = flattenVariants();
-    let added = 0;
-    // 入力欄の順序でURL組み立て順を制御
+
+    // 今回マッチすべき variantId 集合を構築
+    const newAutoVids = new Set();
     for (const code of codes) {
       for (const r of allRows) {
-        if (r.productCode && r.productCode.toUpperCase() === code) {
-          if (!selected.has(r.variantId)) {
-            selected.set(r.variantId, { qty: defaultQty });
-            added++;
-          }
+        if (matchesInputCode(r, code)) newAutoVids.add(r.variantId);
+      }
+    }
+
+    // 既存の auto 選択のうち、今回マッチしないものを削除
+    for (const [vid, info] of Array.from(selected.entries())) {
+      if (info.auto && !newAutoVids.has(vid)) {
+        selected.delete(vid);
+      }
+    }
+
+    // 新規 auto 選択を追加（URL順序を入力欄順で構築）
+    let added = 0;
+    for (const code of codes) {
+      for (const r of allRows) {
+        if (matchesInputCode(r, code) && !selected.has(r.variantId)) {
+          selected.set(r.variantId, { qty: defaultQty, auto: true });
+          added++;
         }
       }
     }
@@ -393,7 +428,7 @@
     }
     selected.clear();
     for (const r of allRows) {
-      selected.set(r.variantId, { qty: defaultQty });
+      selected.set(r.variantId, { qty: defaultQty, auto: false });
     }
     updateUrl();
     render();
@@ -407,11 +442,12 @@
       return;
     }
     const allRows = flattenVariants();
-    const productCodesInData = new Set(
-      allRows.filter(r => r.productCode).map(r => r.productCode.toUpperCase())
+    const matched = codes.filter(code =>
+      allRows.some(r => matchesInputCode(r, code))
     );
-    const matched = codes.filter(c => productCodesInData.has(c));
-    const unmatched = codes.filter(c => !productCodesInData.has(c));
+    const unmatched = codes.filter(code =>
+      !allRows.some(r => matchesInputCode(r, code))
+    );
 
     let html = `マッチ:${matched.length}件 / 入力${codes.length}件`;
     if (unmatched.length > 0) {
@@ -422,12 +458,15 @@
 
   function render() {
     let rows = flattenVariants();
-    const codeSet = getCodeSet();
+    const codes = getActiveCodes();
+
+    // 対象判定: いずれかの入力コードと matchesInputCode で一致
+    const isTargetRow = (r) => codes.some(code => matchesInputCode(r, code));
 
     const allCount = rows.length;
     const blindCount = rows.filter(r => r.tag === 'blind').length;
     const singleCount = rows.filter(r => r.tag === 'single').length;
-    const targetCount = rows.filter(r => r.productCode && codeSet.has(r.productCode.toUpperCase())).length;
+    const targetCount = rows.filter(isTargetRow).length;
     document.getElementById('count-all').textContent = ` (${allCount})`;
     document.getElementById('count-blind').textContent = ` (${blindCount})`;
     document.getElementById('count-single').textContent = ` (${singleCount})`;
@@ -435,7 +474,7 @@
 
     rows = rows.filter(r => {
       if (currentTab === 'target') {
-        if (!r.productCode || !codeSet.has(r.productCode.toUpperCase())) return false;
+        if (!isTargetRow(r)) return false;
       } else if (currentTab !== 'all' && r.tag !== currentTab) {
         return false;
       }
@@ -453,7 +492,7 @@
     listEl.innerHTML = rows.map(r => {
       const sel = selected.get(r.variantId);
       const checked = sel ? 'checked' : '';
-      const isMatched = r.productCode && codeSet.has(r.productCode.toUpperCase());
+      const isMatched = isTargetRow(r);
       const rowClasses = ['row'];
       if (sel) rowClasses.push('selected');
       if (isMatched) rowClasses.push('matched');
@@ -461,7 +500,9 @@
       const badgeClass = r.tag === 'blind' ? 'badge-blind' : 'badge-single';
       const badgeLabel = r.tag === 'blind' ? 'ブ' : '単';
       const soldOutBadge = !r.available ? '<span class="badge badge-soldout">売切</span>' : '';
-      const codeBadge = r.productCode ? `<span class="badge badge-code">${escapeHtml(r.productCode)}</span>` : '';
+      // バッジは variantCode 優先（より具体的）。なければ productCode
+      const displayCode = r.variantCode || r.productCode;
+      const codeBadge = displayCode ? `<span class="badge badge-code">${escapeHtml(displayCode)}</span>` : '';
       const targetBadge = isMatched ? '<span class="badge badge-target">対象</span>' : '';
       const displayTitle = useFullName ? r.productTitle : cleanProductName(r.productTitle);
       const variantLabel = r.showVariantLabel
@@ -498,7 +539,7 @@
           const row = e.target.closest('.row');
           const qtyInput = row.querySelector('.qty-input');
           const qty = parseInt(qtyInput.value) || 1;
-          selected.set(vid, { qty });
+          selected.set(vid, { qty, auto: false });
         } else {
           selected.delete(vid);
         }
